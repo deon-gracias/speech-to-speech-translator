@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_azure_tts/flutter_azure_tts.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
@@ -31,32 +33,41 @@ class MyHomePage extends StatefulWidget {
 
 const List<List<String>> list = [
   ["Hindi", "hi"],
-  ["Punjabi", "pa"],
   ["Sanskrit", "sa"],
   ["Bengali", "bn"],
   ["Marathi", "mr"],
-  ["Gujarati", "gu"],
-  ["Urdu", "ur"],
-  ["Assamese", "as"],
-  ["Odia", "or"],
   ["Nepali", "ne"],
-  ["Maithili", "mai"],
-  ["Konkani", "gom"],
-  ["Santali", "sat"],
-  ["Sindhi", "sd"],
-  ["Dogri", "doi"],
-  ["Meiteilon", "mni-Mtei"],
-  ["Bhojpuri", "bho"]
+  ["Gujarati", "gu"], // No TTS
+  ["Punjabi", "pa"], // No TTS
+  ["Urdu", "ur"], // No TTS
+  ["Sindhi", "sd"], // No TTS
+  // ["Assamese", "as"], // No Translation
+  // ["Odia", "or"], // No Translation
+  // ["Maithili", "mai"], // No Translation
+  // ["Konkani", "gom"], // No Translation
+  // ["Santali", "sat"], // No Translation
+  // ["Dogri", "doi"], // No Translation
+  // ["Meiteilon", "mni-Mtei"], No Translation
+  // ["Bhojpuri", "bho"] // No Translation
 ];
 
 class _MyHomePageState extends State<MyHomePage> {
   final translator = GoogleTranslator();
+  final azureTts = AzureTts.init(
+      subscriptionKey: "6f062081b3b1440f91afbffbf24e77d1",
+      region: "eastus",
+      withLogs: true);
+
   final SpeechToText _speechToText = SpeechToText();
   FlutterTts flutterTts = FlutterTts();
+  TextEditingController outputController = TextEditingController();
+  TextEditingController inputController = TextEditingController();
   bool _speechEnabled = false;
-  String _lastWords = '';
-  String _translated = '';
+  // String _lastWords = '';
+  // String _translated = '';
   String targetLanguage = list.first[1];
+
+  // Get available voices
 
   @override
   void initState() {
@@ -90,7 +101,7 @@ class _MyHomePageState extends State<MyHomePage> {
   /// the platform returns recognized words.
   void _onSpeechResult(SpeechRecognitionResult result) {
     setState(() {
-      _lastWords = result.recognizedWords;
+      inputController.text = result.recognizedWords;
       translate();
     });
   }
@@ -108,12 +119,39 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> translate() async {
     if (_speechToText.isListening) return;
 
-    final output = await translator.translate(_lastWords, to: targetLanguage);
+    final output =
+        await translator.translate(inputController.text, to: targetLanguage);
     setState(() {
-      _translated = output.text;
+      outputController.text = output.text;
     });
     _speak(output.text);
   }
+
+  // azureTranslate() async {
+  //   final voicesResponse = await AzureTts.getAvailableVoices();
+
+  //   //List all available voices
+  //   print("${voicesResponse.voices}");
+
+  //   //Pick a Neural voice
+  //   final voice = voicesResponse.voices
+  //       .where((element) => element.locale.startsWith(targetLanguage))
+  //       .toList(growable: false)
+  //       .first;
+
+  //   TtsParams params = TtsParams(
+  //       voice: voice,
+  //       audioFormat: AudioOutputFormat.audio16khz32kBitrateMonoMp3,
+  //       rate: 1.5, // optional prosody rate (default is 1.0)
+  //       text: outputController.text);
+
+  //   final ttsResponse = await AzureTts.getTts(params);
+
+  //   //Get the audio bytes.
+  //   final audioBytes = ttsResponse.audio.buffer.asByteData();
+  //   ttsResponse.audio.buffer.
+
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -121,14 +159,46 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: const Text('Speech Demo'),
       ),
-      body: Center(
+      body: SingleChildScrollView(
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              // DropdownMenu<String>(
+              //   label: const Text("From"),
+              //   initialSelection: targetLanguage,
+              //   width: 200,
+              //   menuHeight: 300,
+              //   onSelected: (String? value) {
+              //     setState(() {
+              //       targetLanguage = value!;
+              //     });
+              //   },
+              //   dropdownMenuEntries: list.map<DropdownMenuEntry<String>>((e) {
+              //     return DropdownMenuEntry<String>(
+              //       value: e[1],
+              //       label: e[0],
+              //     );
+              //   }).toList(),
+              // ),
+              // const SizedBox(height: 5),
+              TextField(
+                controller: inputController,
+                decoration: const InputDecoration(
+                    border: OutlineInputBorder(), hintText: "Input Text"),
+                maxLines: 8,
+              ),
+              ElevatedButton(
+                onPressed: () => translate(),
+                child: const Text("Translate"),
+              ),
+              const SizedBox(height: 40),
               DropdownMenu<String>(
+                label: const Text("To"),
                 initialSelection: targetLanguage,
+                width: 200,
+                menuHeight: 300,
                 onSelected: (String? value) {
                   setState(() {
                     targetLanguage = value!;
@@ -141,19 +211,12 @@ class _MyHomePageState extends State<MyHomePage> {
                   );
                 }).toList(),
               ),
-              Text('$_translated'),
-              Text('$_lastWords'),
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    _speechToText.isListening
-                        ? '$_lastWords'
-                        : _speechEnabled
-                            ? 'Tap the microphone to start listening...'
-                            : 'Speech not available',
-                  ),
-                ),
+              const SizedBox(height: 5),
+              TextField(
+                controller: outputController,
+                decoration: const InputDecoration(
+                    border: OutlineInputBorder(), hintText: "Output Text"),
+                maxLines: 8,
               ),
             ],
           ),
@@ -161,7 +224,6 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed:
-            // If not yet listening for speech start, otherwise stop
             _speechToText.isNotListening ? _startListening : _stopListening,
         tooltip: 'Listen',
         child: Icon(_speechToText.isNotListening ? Icons.mic_off : Icons.mic),
